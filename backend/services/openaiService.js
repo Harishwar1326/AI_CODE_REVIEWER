@@ -364,7 +364,24 @@ async function reviewCode({ code, language }) {
     throw wrappedError;
   }
 
-  const rawContent = completion.choices?.[0]?.message?.content;
+  const messageContent = completion.choices?.[0]?.message?.content;
+  const rawContent = Array.isArray(messageContent)
+    ? messageContent
+        .map((part) => {
+          if (typeof part === "string") {
+            return part;
+          }
+
+          if (part && typeof part === "object" && "text" in part) {
+            return typeof part.text === "string" ? part.text : "";
+          }
+
+          return "";
+        })
+        .join("")
+    : typeof messageContent === "string"
+      ? messageContent
+      : "";
 
   if (!rawContent) {
     const error = new Error("Groq returned an empty response.");
@@ -372,10 +389,16 @@ async function reviewCode({ code, language }) {
     throw error;
   }
 
+  const normalizedContent = rawContent
+    .trim()
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/\s*```$/, "");
+
   let parsedResponse;
 
   try {
-    parsedResponse = JSON.parse(rawContent);
+    parsedResponse = JSON.parse(normalizedContent);
   } catch (error) {
     const parsingError = new Error("Groq returned invalid JSON.");
     parsingError.statusCode = 502;
