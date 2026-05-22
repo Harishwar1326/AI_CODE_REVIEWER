@@ -15,6 +15,7 @@ A full-stack AI-powered code reviewer that analyzes Python, C, Java, and C++ cod
   - simulated reviewer perspectives
 - Express backend with validation and clean JSON errors
 - Vite frontend with fast local development
+- Vercel-friendly serverless backend under `api/backend`
 
 ## Tech Stack
 
@@ -50,8 +51,8 @@ npm run build --workspace frontend
 
 ## API
 
-- `GET /api/health` - health check
-- `POST /api/review` - analyze submitted code
+- `GET /api/backend/health` - health check
+- `POST /api/backend/review` - analyze submitted code
 
 ## Environment Variables
 
@@ -61,3 +62,5 @@ npm run build --workspace frontend
 ## Notes
 
 The app does not use a database or authentication. All reviews are generated live from the Groq API.
+
+For Vercel deployment, the frontend calls the same-origin `/api/backend/...` routes and the Express app is exported from `api/backend/index.js` without `app.listen()`.

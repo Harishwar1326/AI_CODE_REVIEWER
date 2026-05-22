@@ -4,12 +4,12 @@
   "version": "1.0.0",
   "workspaces": [
     "frontend",
-    "backend"
+    "api/backend"
   ],
   "scripts": {
-    "dev": "concurrently \"npm run dev --workspace frontend\" \"npm run dev --workspace backend\"",
-    "build": "npm run build --workspace frontend && node scripts/sync-vercel-dist.mjs",
-    "start": "npm run start --workspace backend"
+    "dev": "concurrently \"npm run dev --workspace frontend\" \"node backend/server.js\"",
+    "build": "npm run build --workspace frontend",
+    "start": "node backend/server.js"
   },
   "devDependencies": {
     "concurrently": "^9.2.0"
