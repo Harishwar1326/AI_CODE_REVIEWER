@@ -308,6 +308,194 @@ function normalizeLanguage(language) {
   return languageLabels[language] || "Python";
 }
 
+function extractFailedGeneration(error) {
+  if (typeof error?.failed_generation === "string") {
+    return error.failed_generation;
+  }
+
+  if (typeof error?.details?.failed_generation === "string") {
+    return error.details.failed_generation;
+  }
+
+  const message = error?.message || "";
+  // Try to locate a JSON-like substring after the failed_generation key.
+  const fgIndex = message.indexOf("failed_generation");
+  if (fgIndex === -1) return "";
+
+  // Extract the first brace-delimited JSON object after the key.
+  const after = message.slice(fgIndex);
+  const firstBrace = after.indexOf("{");
+  if (firstBrace === -1) return "";
+
+  let depth = 0;
+  let endIndex = -1;
+  for (let i = firstBrace; i < after.length; i++) {
+    const ch = after[i];
+    if (ch === "{") depth++;
+    if (ch === "}") depth--;
+    if (depth === 0) {
+      endIndex = i;
+      break;
+    }
+  }
+
+  if (endIndex === -1) return "";
+
+  let candidate = after.slice(firstBrace, endIndex + 1);
+
+  // Unescape common escaped quotes and newlines.
+  candidate = candidate.replace(/\\\"/g, '"').replace(/\\n/g, "\\n");
+
+  return candidate;
+}
+
+function deriveOverallScore(review) {
+  if (typeof review?.overallScore === "number") {
+    return review.overallScore;
+  }
+
+  if (typeof review?.futureAnalysis?.riskMeter?.score === "number") {
+    return review.futureAnalysis.riskMeter.score;
+  }
+
+  return 100;
+}
+
+function normalizeReviewPayload(review) {
+  return {
+    ...review,
+    overallScore: deriveOverallScore(review),
+    suggestions: {
+      needed: Boolean(review?.suggestions?.needed),
+      improvedCode: review?.suggestions?.improvedCode || "",
+      explanation: review?.suggestions?.explanation || "",
+    },
+    futureAnalysis: {
+      ...review.futureAnalysis,
+      riskMeter: {
+        ...review.futureAnalysis.riskMeter,
+        drivers: review.futureAnalysis.riskMeter.drivers || [],
+      },
+      vulnerabilityForecast: review.futureAnalysis.vulnerabilityForecast || [],
+    },
+  };
+}
+
+function parseFailedGenerationReview(error, languageLabel) {
+  const failedGeneration = extractFailedGeneration(error);
+
+  if (!failedGeneration) return null;
+
+  // Attempt to parse the extracted JSON candidate.
+  try {
+    const parsed = JSON.parse(failedGeneration);
+    const normalized = normalizeReviewPayload(parsed);
+    const validated = reviewOutputSchema.safeParse(normalized);
+    if (validated.success) {
+      return { ...validated.data, language: languageLabel };
+    }
+  } catch (e) {
+    // continue to build a minimal fallback below
+  }
+
+  // Build a minimal valid review to return instead of failing the request.
+  const minimal = {
+    language: languageLabel,
+    detectedProblem: "Could not generate structured review.",
+    codeSummary: "",
+    issues: [],
+    suggestions: {
+      needed: false,
+      improvedCode: "",
+      explanation:
+        "Groq failed to return a valid structured review. See failed_generation for raw output.",
+    },
+    futureAnalysis: {
+      riskMeter: {
+        score: 0,
+        label: "Low",
+        summary: "No data",
+        drivers: ["No data"],
+      },
+      maintainabilityForecast: {
+        summary: "No data",
+        onboardingRisk: "Low",
+        refactorTimeline: "",
+      },
+      technicalDebtTimeline: [
+        {
+          horizon: "Immediate",
+          risk: "Low",
+          title: "No data",
+          description: "No technical debt information available.",
+          action: "None",
+        },
+        {
+          horizon: "Near-term",
+          risk: "Low",
+          title: "No data",
+          description: "",
+          action: "None",
+        },
+        {
+          horizon: "Mid-term",
+          risk: "Low",
+          title: "No data",
+          description: "",
+          action: "None",
+        },
+      ],
+      scalabilityHeatmap: [
+        { area: "CPU", risk: "Low", description: "No data" },
+        { area: "Memory", risk: "Low", description: "No data" },
+        { area: "IO", risk: "Low", description: "No data" },
+        { area: "Team", risk: "Low", description: "No data" },
+      ],
+      vulnerabilityForecast: [],
+    },
+    perspectives: [
+      {
+        role: "Senior Engineer",
+        focus: "",
+        summary: "",
+        findings: [""],
+        recommendation: "",
+      },
+      {
+        role: "Security Engineer",
+        focus: "",
+        summary: "",
+        findings: [""],
+        recommendation: "",
+      },
+      {
+        role: "Performance Engineer",
+        focus: "",
+        summary: "",
+        findings: [""],
+        recommendation: "",
+      },
+      {
+        role: "Beginner Developer",
+        focus: "",
+        summary: "",
+        findings: [""],
+        recommendation: "",
+      },
+      {
+        role: "Production Reliability Engineer",
+        focus: "",
+        summary: "",
+        findings: [""],
+        recommendation: "",
+      },
+    ],
+    overallScore: 0,
+  };
+
+  return minimal;
+}
+
 async function reviewCode({ code, language }) {
   const client = getClient();
   const languageLabel = normalizeLanguage(language);
@@ -346,21 +534,38 @@ async function reviewCode({ code, language }) {
       ],
     });
   } catch (error) {
+    const fallbackReview = parseFailedGenerationReview(error, languageLabel);
+
+    if (fallbackReview) {
+      return fallbackReview;
+    }
+
     const isMissingKey = error?.message?.includes("GROQ_API_KEY");
+    const isSchemaValidationError =
+      error?.code === "json_validate_failed" ||
+      error?.message?.includes("json_validate_failed") ||
+      error?.message?.includes("failed_generation");
     const isQuotaError =
       error?.status === 429 || error?.message?.includes("rate limit");
     const wrappedError = new Error(
       isMissingKey
         ? "GROQ_API_KEY is not configured."
-        : isQuotaError
-          ? "Groq rate limit exceeded. Check your plan limits."
-          : error?.message || "Groq request failed.",
+        : isSchemaValidationError
+          ? "Groq returned review data that did not match the schema. Please retry."
+          : isQuotaError
+            ? "Groq rate limit exceeded. Check your plan limits."
+            : error?.message || "Groq request failed.",
     );
     wrappedError.statusCode = isMissingKey
       ? 503
-      : isQuotaError
-        ? 429
-        : error?.status || 502;
+      : isSchemaValidationError
+        ? 502
+        : isQuotaError
+          ? 429
+          : error?.status || 502;
+    if (isSchemaValidationError && error?.failed_generation) {
+      wrappedError.details = { failedGeneration: error.failed_generation };
+    }
     throw wrappedError;
   }
 
@@ -406,23 +611,23 @@ async function reviewCode({ code, language }) {
     throw parsingError;
   }
 
-  const validated = reviewOutputSchema.parse(parsedResponse);
+  const validated = reviewOutputSchema.safeParse(parsedResponse);
+
+  if (!validated.success) {
+    const schemaError = new Error(
+      "Groq returned review data that did not match the schema. Please retry.",
+    );
+    schemaError.statusCode = 502;
+    schemaError.details = {
+      issues: validated.error.issues,
+      rawContent,
+    };
+    throw schemaError;
+  }
+
   return {
-    ...validated,
+    ...normalizeReviewPayload(validated.data),
     language: languageLabel,
-    suggestions: {
-      ...validated.suggestions,
-      improvedCode: validated.suggestions.improvedCode || "",
-    },
-    futureAnalysis: {
-      ...validated.futureAnalysis,
-      riskMeter: {
-        ...validated.futureAnalysis.riskMeter,
-        drivers: validated.futureAnalysis.riskMeter.drivers || [],
-      },
-      vulnerabilityForecast:
-        validated.futureAnalysis.vulnerabilityForecast || [],
-    },
   };
 }
 

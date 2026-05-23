@@ -51,8 +51,8 @@ npm run build --workspace frontend
 
 ## API
 
-- `GET /api/backend/health` - health check
-- `POST /api/backend/review` - analyze submitted code
+-- `GET /api/health` - health check
+-- `POST /api/review` - analyze submitted code
 
 ## Environment Variables
 
@@ -63,4 +63,4 @@ npm run build --workspace frontend
 
 The app does not use a database or authentication. All reviews are generated live from the Groq API.
 
-For Vercel deployment, the frontend calls the same-origin `/api/backend/...` routes and the Express app is exported from `api/backend/index.js` without `app.listen()`.
+For Vercel deployment, the frontend calls the same-origin `/api/...` routes and the Express app is exported from `api/index.js` without `app.listen()`.

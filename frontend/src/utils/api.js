@@ -1,8 +1,6 @@
 export async function reviewCode({ code, language, fileName }) {
   const baseUrl = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
-  const endpoint = baseUrl
-    ? `${baseUrl}/api/backend/review`
-    : "/api/backend/review";
+  const endpoint = baseUrl ? `${baseUrl}/api/review` : "/api/review";
   const response = await fetch(endpoint, {
     method: "POST",
     headers: {

@@ -1,4 +1,4 @@
-const app = require("../api/backend");
+const app = require("./index");
 
 const port = process.env.PORT || 3000;
 

@@ -22,11 +22,11 @@ app.use(
 );
 app.use(express.json({ limit: "16kb" }));
 
-app.get(["/api/backend/health", "/health"], (_req, res) => {
+app.get(["/api/health", "/health"], (_req, res) => {
   res.json({ status: "ok", uptime: process.uptime() });
 });
 
-app.use("/api/backend/review", reviewRouter);
+app.use("/api/review", reviewRouter);
 app.use("/review", reviewRouter);
 
 app.use(notFound);

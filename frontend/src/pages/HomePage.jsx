@@ -28,7 +28,11 @@ export default function HomePage() {
     }
 
     setLocalMessage('');
-    await analyze({ code: trimmedCode, language, fileName });
+    try {
+      await analyze({ code: trimmedCode, language, fileName });
+    } catch {
+      // The hook already stores the error state for display.
+    }
   }
 
   function handleFileLoaded(result) {
