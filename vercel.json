@@ -9,18 +9,22 @@
       }
     },
     {
-      "src": "api/index.js",
+      "src": "api/review.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "api/health.js",
       "use": "@vercel/node"
     }
   ],
   "routes": [
     {
-      "src": "/api/(.*)",
-      "dest": "api/index.js"
+      "src": "/api/health",
+      "dest": "api/health.js"
     },
     {
-      "src": "/api",
-      "dest": "api/index.js"
+      "src": "/api/review",
+      "dest": "api/review.js"
     },
     {
       "handle": "filesystem"

@@ -15,8 +15,12 @@ const reviewRequestSchema = z.object({
   fileName: z.string().max(255).optional(),
 });
 
+function parseReviewRequest(body) {
+  return reviewRequestSchema.safeParse(body);
+}
+
 function validateReviewRequest(req, res, next) {
-  const parsed = reviewRequestSchema.safeParse(req.body);
+  const parsed = parseReviewRequest(req.body);
 
   if (!parsed.success) {
     const details = parsed.error.issues.map((issue) => ({
@@ -39,5 +43,6 @@ function validateReviewRequest(req, res, next) {
 
 module.exports = {
   supportedLanguages,
+  parseReviewRequest,
   validateReviewRequest,
 };
